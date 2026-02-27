@@ -54,6 +54,24 @@ services:
       timeout: 5s
       retries: 12
 
+  analytics-api:
+    build:
+      context: ../analytics
+      target: production
+    container_name: streampulse-analytics
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=streampulse
+      - POSTGRES_USER=streampulse
+      - POSTGRES_PASSWORD=streampulse
+      - PORT=4000
+
 volumes:
   kafka_data:
   pg_data:
