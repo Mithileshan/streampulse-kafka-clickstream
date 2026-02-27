@@ -9,7 +9,7 @@ load_dotenv()
 # ── Postgres connection ────────────────────────────────────────────────────────
 conn = psycopg2.connect(
     host=os.getenv("POSTGRES_HOST", "localhost"),
-    port=os.getenv("POSTGRES_PORT", "5432"),
+    port=os.getenv("POSTGRES_PORT", "5433"),
     dbname=os.getenv("POSTGRES_DB", "streampulse"),
     user=os.getenv("POSTGRES_USER", "streampulse"),
     password=os.getenv("POSTGRES_PASSWORD", "streampulse"),
