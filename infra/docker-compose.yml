@@ -35,7 +35,7 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: streampulse-kafka-ui
     ports:
-      - "8080:8080"
+      - "8090:8080"
     depends_on:
       kafka:
         condition: service_healthy
