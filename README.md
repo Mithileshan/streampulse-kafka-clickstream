@@ -2,27 +2,68 @@
 
 Real-time clickstream analytics pipeline: events flow from a Python producer through Kafka, get consumed into Postgres, and are served by a TypeScript analytics API.
 
+## Demo
+
+```bash
+cd infra
+docker compose up -d --build
+```
+
+Then open:
+
+| What | URL |
+|------|-----|
+| Kafka UI (live topic messages) | http://localhost:8090 |
+| Top short codes by clicks | http://localhost:4000/stats/top |
+| Stats for a specific code | http://localhost:4000/stats/abc123 |
+| Trending in last 24h | http://localhost:4000/stats/trending?hours=24 |
+
+Run the producer in a second terminal to see events flow live:
+
+```bash
+cd producer && python producer.py
+```
+
+---
+
 ## Architecture
 
 ```
-Producer (Python)
-      │
-      ▼ JSON events
-   Kafka (click-events topic, 3 partitions)
-      │
-      ▼ confluent-kafka consumer
-Consumer (Python) ──► Postgres
-                          │
-                          ├── click_events      (raw event log)
-                          └── click_aggregates  (per-shortcode counts)
-                                    │
-                                    ▼
-                          Analytics API (Node.js/Express)
-                                    │
-                          GET /stats/:shortCode
-                          GET /stats/top
-                          GET /stats/trending
+┌─────────────────────────────────────────────────────────────┐
+│                        PRODUCER                             │
+│         Python + Faker — generates click events             │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ JSON  { shortCode, ip, referrer, ... }
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    APACHE KAFKA 3.7                         │
+│          topic: click-events  │  3 partitions               │
+│                  KRaft mode (no ZooKeeper)                  │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ confluent-kafka consumer
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       CONSUMER                              │
+│                  Python + psycopg2                          │
+│                           │                                 │
+│            ┌──────────────┴──────────────┐                  │
+│            ▼                             ▼                  │
+│    click_events                  click_aggregates           │
+│  (raw event log)            (per-shortcode counters)        │
+└─────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    ANALYTICS API                            │
+│            Node.js 20 + TypeScript + Express                │
+│                                                             │
+│   GET /stats/:shortCode   →  clicks + referrers             │
+│   GET /stats/top          →  top 10 by total clicks         │
+│   GET /stats/trending     →  top 10 in last N hours         │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+---
 
 ## Tech Stack
 
@@ -36,26 +77,40 @@ Consumer (Python) ──► Postgres
 | Monitoring     | Kafka UI                            |
 | Container      | Docker + Docker Compose             |
 
-## Local Stack
+---
 
-### Prerequisites
-- Docker Desktop
+## Running the Pipeline
 
-### Start everything
+### 1. Start the stack
 
 ```bash
 cd infra
-docker compose up -d
+docker compose up -d --build
 ```
 
-### Ports
+### 2. Produce events
 
-| Service       | URL                     |
-|---------------|-------------------------|
-| Kafka         | localhost:9092          |
-| Kafka UI      | http://localhost:8090   |
-| Postgres      | localhost:5433          |
-| Analytics API | http://localhost:4000   |
+```bash
+cd producer
+pip install -r requirements.txt
+python producer.py
+```
+
+### 3. Consume into Postgres
+
+```bash
+cd consumer
+pip install -r requirements.txt
+python consumer.py
+```
+
+### 4. Query the API
+
+```bash
+curl http://localhost:4000/stats/top
+curl http://localhost:4000/stats/abc123
+curl "http://localhost:4000/stats/trending?hours=24"
+```
 
 ### Stop
 
@@ -64,57 +119,61 @@ cd infra
 docker compose down
 ```
 
-## Running the Pipeline
-
-### Producer (emit click events)
-
-```bash
-cd producer
-pip install -r requirements.txt
-python producer.py
-```
-
-### Consumer (store events in Postgres)
-
-```bash
-cd consumer
-pip install -r requirements.txt
-python consumer.py
-```
-
-### Analytics API (local dev)
-
-```bash
-cd analytics
-npm install
-npm run dev
-```
+---
 
 ## API Reference
 
 ### GET /stats/:shortCode
-Returns total clicks, last 24h clicks, and top referrers for a short code.
 
 ```json
 {
   "shortCode": "abc123",
-  "totalClicks": 94,
-  "last24Hours": 94,
-  "lastSeen": "2026-02-27T01:08:33.522Z",
+  "totalClicks": 273,
+  "last24Hours": 273,
+  "lastSeen": "2026-02-27T01:28:57.920Z",
   "topReferrers": [
-    { "referrer": "http://dixon.com/", "clicks": 2 }
+    { "referrer": "https://brown.com/", "clicks": 3 },
+    { "referrer": "http://johnson.com/", "clicks": 3 }
   ]
 }
 ```
 
 ### GET /stats/top
-Returns top 10 short codes by total clicks.
+
+```json
+[
+  { "short_code": "abc123", "total_clicks": "273", "last_seen": "..." },
+  { "short_code": "xyz789", "total_clicks": "268", "last_seen": "..." }
+]
+```
 
 ### GET /stats/trending?hours=24
-Returns top 10 short codes by clicks in the last N hours.
+
+```json
+[
+  { "short_code": "abc123", "clicks": "273" },
+  { "short_code": "xyz789", "clicks": "268" }
+]
+```
 
 ### GET /health
-Returns `{ "status": "ok" }`.
+
+```json
+{ "status": "ok", "timestamp": "2026-02-27T01:26:36.698Z" }
+```
+
+---
+
+## Ports
+
+| Service       | URL                     |
+|---------------|-------------------------|
+| Kafka         | localhost:9092          |
+| Kafka UI      | http://localhost:8090   |
+| Postgres      | localhost:5433          |
+| Analytics API | http://localhost:4000   |
+
+---
 
 ## Environment Variables
 
@@ -129,6 +188,8 @@ Copy `.env.example` to `.env`:
 | POSTGRES_DB              | streampulse    |
 | POSTGRES_USER            | streampulse    |
 | POSTGRES_PASSWORD        | streampulse    |
+
+---
 
 ## Author
 
