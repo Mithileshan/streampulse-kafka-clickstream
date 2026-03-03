@@ -65,20 +65,6 @@ cd producer && python producer.py
 
 ---
 
-## Tech Stack
-
-| Layer          | Technology                          |
-|----------------|-------------------------------------|
-| Message Broker | Apache Kafka 3.7 (KRaft, no ZK)    |
-| Producer       | Python + confluent-kafka + Faker    |
-| Consumer       | Python + confluent-kafka + psycopg2 |
-| Storage        | Postgres 16                         |
-| Analytics API  | Node.js 20 + TypeScript + Express   |
-| Monitoring     | Kafka UI                            |
-| Container      | Docker + Docker Compose             |
-
----
-
 ## Running the Pipeline
 
 ### 1. Start the stack
